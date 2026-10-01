@@ -102,7 +102,7 @@ private struct MenuBarIcon: View {
 private struct MenuContent: View {
     let dictation: Dictation
     @AppStorage(Preferences.languageKey) private var language = "uz"
-    @AppStorage(Preferences.modelKey) private var model = "scribe_v2_realtime"
+    @AppStorage(Preferences.providerKey) private var provider = Provider.elevenlabs.rawValue
 
     var body: some View {
         Button(dictation.phase == .recording ? "Stop Recording" : "Toggle Recording") {
@@ -122,8 +122,8 @@ private struct MenuContent: View {
             Picker("Language", selection: $language) {
                 ForEach(Preferences.languages, id: \.code) { Text($0.name).tag($0.code) }
             }
-            Picker("Voice Model", selection: $model) {
-                ForEach(Preferences.models) { Text($0.name).tag($0.id) }
+            Picker("Voice Model", selection: $provider) {
+                ForEach(Provider.allCases) { Text($0.title).tag($0.rawValue) }
             }
         }
         if let error = dictation.hotKeyError {

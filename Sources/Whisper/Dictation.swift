@@ -68,7 +68,7 @@ final class Dictation {
 
     @ObservationIgnored var openMain: ((Pane) -> Void)?
     @ObservationIgnored private var audio: AudioCapture?
-    @ObservationIgnored private var scribe: ScribeClient?
+    @ObservationIgnored private var scribe: Transcriber?
     @ObservationIgnored private var pump: Task<Void, Never>?
     @ObservationIgnored private var pressedAt: ContinuousClock.Instant?
     @ObservationIgnored private var startedAt: Date?
@@ -186,8 +186,9 @@ final class Dictation {
     }
 
     private func start() {
-        guard let apiKey = Preferences.apiKey else {
-            flash("Add your ElevenLabs API key in Models library")
+        let provider = Provider.current
+        guard let apiKey = provider.apiKey else {
+            flash("Add your \(provider.title) API key in Models library")
             openMain?(.models)
             return
         }
@@ -203,13 +204,23 @@ final class Dictation {
         }
 
         let defaults = UserDefaults.standard
-        let scribe = ScribeClient(options: ScribeOptions(
-            apiKey: apiKey,
-            language: defaults.string(forKey: Preferences.languageKey) ?? "uz",
-            keyterms: Array(Preferences.vocabulary.prefix(100)),
-            noVerbatim: defaults.bool(forKey: Preferences.noVerbatimKey),
-            model: defaults.string(forKey: Preferences.modelKey) ?? "scribe_v2_realtime"
-        ))
+        let language = defaults.string(forKey: Preferences.languageKey) ?? "uz"
+        let keyterms = Array(Preferences.vocabulary.prefix(100))
+        let scribe: Transcriber = provider == .elevenlabs
+            ? ScribeClient(options: ScribeOptions(
+                apiKey: apiKey,
+                language: language,
+                keyterms: keyterms,
+                noVerbatim: defaults.bool(forKey: Preferences.noVerbatimKey),
+                model: provider.model
+            ))
+            : BatchTranscriber(request: TranscriptionRequest(
+                provider: provider,
+                apiKey: apiKey,
+                model: provider.model,
+                language: language,
+                keyterms: keyterms
+            ))
         scribe.onPartial = { [weak self] text in self?.transcript = Preferences.display(text) }
         scribe.onError = { [weak self] text in self?.fail(text) }
         scribe.connect()
@@ -264,7 +275,7 @@ final class Dictation {
         Task {
             await pump?.value
             pump = nil
-            let result = await scribe.finish()
+            let result = await scribe.finish(timeout: .seconds(8))
             self.audio = nil
             self.scribe = nil
             phase = .idle

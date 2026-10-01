@@ -131,7 +131,7 @@ private struct Sidebar: View {
             .padding(.horizontal, 12)
             Spacer()
             VStack(spacing: 8) {
-                Text(Preferences.apiKey == nil ? "ElevenLabs not connected" : "ElevenLabs connected")
+                Text(Preferences.apiKey == nil ? "\(Provider.current.title) not connected" : "\(Provider.current.title) connected")
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.tertiary)
                 Text(AppInfo.name)
@@ -259,7 +259,7 @@ private struct HomeView: View {
                         dictation.toggleFromMenu()
                     }
                     if Preferences.apiKey == nil {
-                        GetStartedRow(symbol: "key.fill", title: "Connect ElevenLabs", subtitle: "Add your API key to start transcribing.") {
+                        GetStartedRow(symbol: "key.fill", title: "Connect \(Provider.current.title)", subtitle: "Add your API key to start transcribing.") {
                             dictation.pane = .models
                         }
                     }
@@ -409,7 +409,7 @@ private struct ModesView: View {
                         Text("Voice to text").font(.system(size: 14, weight: .medium))
                         Circle().fill(.green).frame(width: 8, height: 8)
                         Spacer()
-                        Text("ElevenLabs")
+                        Text(Provider.current.title)
                             .font(.system(size: 11, weight: .semibold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
@@ -482,12 +482,9 @@ private struct ModeDetailView: View {
                         Toggle("", isOn: $latin).toggleStyle(.switch).labelsHidden().controlSize(.mini)
                     }
                     .disabled(language != "uz")
-                    SettingsRow("Voice Model") {
-                        Picker("", selection: $model) {
-                            ForEach(Preferences.models) { Text($0.name).tag($0.id) }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                    SettingsRow("Voice Model", subtitle: "Change it in Models library") {
+                        Text("\(Provider.current.title) · \(Provider.current.model)")
+                            .foregroundStyle(.secondary)
                     }
                 }
                 SettingsSection {
@@ -982,120 +979,158 @@ private struct SoundView: View {
 }
 
 private struct ModelsView: View {
-    @AppStorage(Preferences.modelKey) private var selected = "scribe_v2_realtime"
-    @State private var query = ""
-    @State private var showingKey = Preferences.apiKey == nil
-    @State private var connected = Preferences.apiKey != nil
+    @AppStorage(Preferences.providerKey) private var selected = Provider.elevenlabs.rawValue
+    @State private var editing: Provider?
+    @State private var revision = 0
 
     var body: some View {
-        let models = Preferences.models.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
-        VStack(spacing: 0) {
-            HStack {
-                Menu("ElevenLabs") {}
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .disabled(true)
-                Spacer()
-                Button {
-                    showingKey = true
-                } label: {
-                    Label(connected ? "API key" : "Add API key", systemImage: "key.fill")
-                }
-                .controlSize(.large)
-                .help("ElevenLabs API key")
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 0) {
-                GridRow {
-                    Text("")
-                    Text("Model name")
-                    Text("Type")
-                    Text("Speed / Accuracy")
-                    Text("Cloud")
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
-                ForEach(models) { model in
-                    GridRow {
-                        Image(systemName: selected == model.id ? "star.fill" : "star")
-                            .foregroundStyle(selected == model.id ? .primary : .tertiary)
-                        HStack(spacing: 10) {
-                            Image(systemName: "waveform")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 26, height: 26)
-                                .background(.black, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(model.name).font(.system(size: 14, weight: selected == model.id ? .semibold : .regular))
-                                Text(model.detail).font(.system(size: 11)).foregroundStyle(.secondary)
-                            }
-                        }
-                        Image(systemName: "waveform.badge.mic").foregroundStyle(.secondary)
-                        HStack(spacing: 10) {
-                            Meter(value: model.speed)
-                            Meter(value: model.accuracy)
-                        }
-                        Image(systemName: "cloud").foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selected = model.id }
-                    Divider().gridCellUnsizedAxes(.horizontal)
+        SettingsPage {
+            SettingsSection("Voice models") {
+                ForEach(Provider.allCases) { provider in
+                    ProviderRow(
+                        provider: provider,
+                        selected: selected == provider.rawValue,
+                        connected: provider.apiKey != nil,
+                        onSelect: {
+                            selected = provider.rawValue
+                            if provider.apiKey == nil { editing = provider }
+                        },
+                        onKey: { editing = provider }
+                    )
+                    .id("\(provider.rawValue)-\(revision)")
                 }
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
+            if let provider = Provider(rawValue: selected) {
+                ModelSettings(provider: provider)
+                    .id(provider)
+            }
         }
-        .safeAreaInset(edge: .top) { SearchBar(text: $query, prompt: "Search models") }
-        .sheet(isPresented: $showingKey) {
-            APIKeySheet { connected = Preferences.apiKey != nil }
+        .sheet(item: $editing) { provider in
+            APIKeySheet(provider: provider) { revision += 1 }
         }
     }
 }
 
-private struct Meter: View {
-    let value: Int
+private struct ProviderRow: View {
+    let provider: Provider
+    let selected: Bool
+    let connected: Bool
+    let onSelect: () -> Void
+    let onKey: () -> Void
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<5, id: \.self) { index in
-                Capsule()
-                    .fill(index < value ? Color.primary.opacity(0.75) : Color.primary.opacity(0.15))
-                    .frame(width: 10, height: 3)
+        HStack(spacing: 12) {
+            Image(systemName: selected ? "star.fill" : "star")
+                .font(.system(size: 12))
+                .foregroundStyle(selected ? .primary : .tertiary)
+                .frame(width: 16)
+            Image(systemName: provider.symbol)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(.black, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(provider.title).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    Text(provider.isRealtime ? "Realtime" : "Batch")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Palette.selection, in: Capsule())
+                }
+                Text(provider.detail).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button(action: onKey) {
+                Label(connected ? "Connected" : "Add key", systemImage: connected ? "checkmark.circle.fill" : "key")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(connected ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+    }
+}
+
+private struct ModelSettings: View {
+    let provider: Provider
+    @State private var custom = ""
+    @State private var model = ""
+
+    var body: some View {
+        SettingsSection("\(provider.title) model") {
+            SettingsRow("Model") {
+                Picker("", selection: $model) {
+                    ForEach(provider.models, id: \.self) { Text(label(for: $0)).tag($0) }
+                    if !provider.models.contains(model) {
+                        Text(model).tag(model)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: model) { _, value in store(value) }
+            }
+            SettingsRow("Custom model ID", subtitle: "Use a newer model name from the provider") {
+                TextField("model-id", text: $custom)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+                    .onSubmit {
+                        let value = custom.trimmingCharacters(in: .whitespaces)
+                        guard !value.isEmpty else { return }
+                        model = value
+                        custom = ""
+                    }
             }
         }
+        .onAppear { model = provider.model }
+    }
+
+    private func store(_ value: String) {
+        UserDefaults.standard.set(value, forKey: provider.modelKey)
+    }
+
+    private func label(for id: String) -> String {
+        Preferences.models.first { $0.id == id }?.name ?? id
     }
 }
 
 private struct APIKeySheet: View {
+    let provider: Provider
     let onSave: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var apiKey = Secrets.read(Preferences.apiKeyAccount) ?? ""
+    @State private var apiKey = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "key.fill")
+                Image(systemName: provider.symbol)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(.black, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ElevenLabs API key").font(.headline)
-                    Text("Needs the Speech to Text permission. Stored only on this Mac.")
+                    Text("\(provider.title) API key").font(.headline)
+                    Text("Stored only on this Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            SecureField("sk_…", text: $apiKey)
+            SecureField("API key", text: $apiKey)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
             HStack {
-                Link("Get an API key", destination: URL(string: "https://elevenlabs.io/app/settings/api-keys")!)
+                Link("Get an API key", destination: provider.keyURL)
                 Spacer()
+                if provider.apiKey != nil {
+                    Button("Remove", role: .destructive) {
+                        Secrets.write("", for: provider.rawValue)
+                        onSave()
+                        dismiss()
+                    }
+                }
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save", action: save)
@@ -1104,11 +1139,12 @@ private struct APIKeySheet: View {
             }
         }
         .padding(22)
-        .frame(width: 440)
+        .frame(width: 460)
+        .onAppear { apiKey = Secrets.read(provider.rawValue) ?? "" }
     }
 
     private func save() {
-        Secrets.write(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), for: Preferences.apiKeyAccount)
+        Secrets.write(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), for: provider.rawValue)
         onSave()
         dismiss()
     }

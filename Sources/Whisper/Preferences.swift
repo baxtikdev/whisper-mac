@@ -53,6 +53,7 @@ enum Preferences {
     static let retentionKey = "retentionDays"
     static let replacementsKey = "replacements"
     static let modelKey = "model"
+    static let providerKey = "provider"
     static let soundStyleKey = "soundStyle"
     static let latinKey = "uzbekLatin"
 
@@ -90,8 +91,7 @@ enum Preferences {
     }
 
     static var apiKey: String? {
-        guard let key = Secrets.read(apiKeyAccount), !key.isEmpty else { return nil }
-        return key
+        Provider.current.apiKey
     }
 
     static var vocabulary: [String] {

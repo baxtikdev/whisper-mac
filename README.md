@@ -1,11 +1,22 @@
 # Whisper
 
-A native macOS menu bar dictation app. Hold or tap a hotkey, speak, and the text is typed into whatever app you are using. Transcription runs on ElevenLabs Scribe v2 Realtime with your own API key, with first-class support for Uzbek.
+A native macOS menu bar dictation app. Hold or tap a hotkey, speak, and the text is typed into whatever app you are using. Bring your own API key for ElevenLabs, OpenAI, Google Gemini, Groq, Deepgram or Soniox, with first-class support for Uzbek.
 
 ## Features
 
 - **Push to talk or toggle**: hold `⌥ Space` to dictate, or tap it to start and tap again to stop. `esc` cancels.
-- **Realtime transcription**: words appear while you speak (ElevenLabs Scribe v2 Realtime / Turbo / Lite, 90+ languages).
+- **Multiple providers**: pick the speech-to-text engine in Models library, each with its own key and model.
+
+  | Provider | Mode | Default model |
+  |---|---|---|
+  | ElevenLabs | Realtime (words appear while you speak) | `scribe_v2_realtime` |
+  | OpenAI | Batch | `gpt-4o-transcribe` |
+  | Google Gemini | Batch | `gemini-3.8-flash` |
+  | Groq | Batch | `whisper-large-v3-turbo` |
+  | Deepgram | Batch | `nova-3` |
+  | Soniox | Batch | `stt-async-preview` |
+
+  Batch providers receive the whole recording when you stop. Any model ID can be overridden in the app.
 - **Auto paste**: the result is pasted at the cursor and your clipboard is restored afterwards.
 - **Uzbek Latin output**: Cyrillic Uzbek is converted to Latin script automatically (`o‘`, `g‘`, `sh`, `ch`).
 - **Recorder overlay**: a minimal pill at the top of the screen with a live waveform, hover controls, a mode switcher (`⌥⇧K`) and an expanded window with stop / cancel.
@@ -17,7 +28,7 @@ A native macOS menu bar dictation app. Hold or tap a hotkey, speak, and the text
 
 - macOS 15 or later
 - Swift 6.2 toolchain (Xcode or Command Line Tools)
-- An [ElevenLabs API key](https://elevenlabs.io/app/settings/api-keys) with the Speech to Text permission
+- An API key for at least one provider (for ElevenLabs, enable the Speech to Text permission on the key)
 
 ## Build and install
 
@@ -30,7 +41,7 @@ The build script creates a self-signed code signing certificate on first run so 
 
 On first launch:
 
-1. Open **Models library** and add your ElevenLabs API key.
+1. Open **Models library**, pick a provider and add its API key.
 2. Grant **Microphone** access when asked.
 3. Grant **Accessibility** access (Configuration → Permissions) so the text can be pasted for you.
 
@@ -53,6 +64,7 @@ Custom sound effects can be placed in `~/Library/Application Support/Whisper/Sou
 |---|---|
 | `Sources/Whisper/Dictation.swift` | Recording state machine, hotkeys, paste |
 | `Sources/Whisper/ScribeClient.swift` | ElevenLabs realtime WebSocket client |
+| `Sources/Whisper/Providers.swift` | Provider catalog and batch clients (OpenAI, Gemini, Groq, Deepgram, Soniox) |
 | `Sources/Whisper/AudioCapture.swift` | Microphone capture and 16 kHz PCM conversion |
 | `Sources/Whisper/Overlay.swift` | Recorder pill and expanded window |
 | `Sources/Whisper/MainWindow.swift` | Settings, history, vocabulary UI |

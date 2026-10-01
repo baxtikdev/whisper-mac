@@ -1,0 +1,5 @@
+.build/
+build/
+build.noindex/
+*.app
+.DS_Store
